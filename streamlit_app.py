@@ -1,19 +1,7 @@
-"""
-Streamlit app to extract/segregate EL PV cells from EL PV module images and
-export an annotated dataset (image / mask pairs + metadata) ready for model training.
-
-Features:
-- Upload EL module images (one or many)
-- Auto-detect grid (morphology + projection peaks) OR enforce an expected total cell count
-- Rectify module (perspective warp) when possible for reliable grid splitting
-- Generate per-cell crop (original-space) and per-cell mask (warp-space → mapped)
-- Preview detected cells and include/exclude per-cell for export
-- Export a ZIP containing images, masks, and annotations.json suitable for training
-
-Run:
-pip install -r requirements.txt
-streamlit run app.py
-"""
+# streamlit_app.py
+# EL PV Cell Extractor — Build image+mask dataset for training (Streamlit)
+# (This is the app code. If you already have a working app file from previous messages,
+#  use that instead; this file is the same dataset-builder variant.)
 import io
 import math
 import json
@@ -47,10 +35,6 @@ def zip_bytes_from_dict(filedict: Dict[str, bytes]) -> bytes:
 # Geometry & rectification
 # ---------------------------
 def perspective_warp(img_bgr: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Try to detect the largest quadrilateral (module) and warp to a rectangle.
-    Returns: (warped_img, M, Minv). On failure returns identity transforms with copy of input.
-    """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5,5), 0)
     edges = cv2.Canny(blur, 50, 150)
