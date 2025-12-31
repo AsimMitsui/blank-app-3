@@ -14,7 +14,6 @@ Usage:
 - Upload multiple images, tune parameters, check "Save outputs" to persist crops to `Output directory`.
 - Click "Run (process uploads)" to process uploaded files.
 - Or provide a local folder path on the server and press "Process folder" to batch-process images already on disk.
-- NEW: After processing you can also press "Save detected cells" to persist results saved in the app session.
 """
 import os
 import io
@@ -305,12 +304,6 @@ process_folder_btn = st.sidebar.button("📁 Process server folder")
 uploads = st.file_uploader("Upload EL module image(s)", type=["jpg", "jpeg", "png", "bmp", "tif", "tiff"], accept_multiple_files=True)
 
 # ---------------------------------------
-# Ensure session storage for last results (so user can save later)
-# ---------------------------------------
-if "last_results" not in st.session_state:
-    st.session_state["last_results"] = {}  # filename -> process_single_image result dict
-
-# ---------------------------------------
 # Processing function
 # ---------------------------------------
 def process_single_image(img_pil: Image.Image,
@@ -366,7 +359,7 @@ def process_single_image(img_pil: Image.Image,
             "mask": mask
         })
 
-    # Optionally save to disk immediately
+    # Optionally save to disk
     if save_root is not None:
         save_root = Path(save_root)
         ensure_dir(save_root)
@@ -393,10 +386,7 @@ def process_single_image(img_pil: Image.Image,
             json.dump(meta, f, indent=2)
 
     elapsed = time.time() - t0
-    result = {"n_cells": len(outputs), "overlay": overlay, "outputs": outputs, "elapsed": elapsed}
-    # store in session so user can save later if desired
-    st.session_state["last_results"][settings.get("name", f"img_{int(time.time())}")] = result
-    return result
+    return {"n_cells": len(outputs), "overlay": overlay, "outputs": outputs, "elapsed": elapsed}
 
 # ---------------------------------------
 # Batch helpers
@@ -567,43 +557,5 @@ if process_folder_btn:
         if zip_bytes:
             st.download_button("📦 Download combined ZIP of folder processing", data=zip_bytes, file_name="folder_cells.zip", mime="application/zip")
 
-# ---------------------------------------
-# NEW: Save detected cells from last_results session_state
-# ---------------------------------------
-st.sidebar.markdown("### Save detected results")
-save_detected_btn = st.sidebar.button("💾 Save detected cells")
-
-if save_detected_btn:
-    if not st.session_state["last_results"]:
-        st.warning("No detection results in session. Run processing first.")
-    else:
-        out_root = Path(out_dir_str)
-        ensure_dir(out_root)
-        saved = 0
-        for name, res in st.session_state["last_results"].items():
-            mod_dir = out_root / name
-            images_dir = mod_dir / "images"
-            masks_dir = mod_dir / "masks"
-            ensure_dir(images_dir)
-            ensure_dir(masks_dir)
-            # overlay
-            overlay = res.get("overlay")
-            if overlay is not None:
-                save_image(mod_dir / f"{name}_overlay.jpg", overlay)
-            for out in res.get("outputs", []):
-                idx = out["index"]
-                crop = out["crop"]
-                mask = out["mask"]
-                if crop is None:
-                    continue
-                # save image
-                pil_img = cv_to_pil(crop)
-                pil_img.save(images_dir / f"{name}_cell_{idx:03d}.png", format="PNG")
-                # save mask
-                pil_mask = Image.fromarray((mask * 255).astype(np.uint8))
-                pil_mask.save(masks_dir / f"{name}_cell_{idx:03d}_mask.png", format="PNG")
-                saved += 1
-        st.success(f"Saved {saved} detected cells to {str(out_root.resolve())}")
-
 st.markdown("---")
-st.caption("Notes: 'Save detected cells' writes results that are currently in the session (from the most recent processing run). If you processed with 'Save segmented cells to disk' enabled the files were already written during processing; this button lets you persist session results afterwards as well.")
+st.caption("Notes: 'Save segmented cells to disk' writes per-image directories under the Output directory. The combined ZIP (in-memory) collects overlay images, per-cell crops and masks for every processed image. Processing a server folder requires that Streamlit has access to that path (useful when testing on a server with images already uploaded).")
