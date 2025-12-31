@@ -1,3 +1,4 @@
+
 import os
 import io
 import cv2
@@ -46,9 +47,7 @@ def normalize_el(img_bgr: np.ndarray, clahe_clip: float = 2.5, tile: int = 8, bl
     clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(tile, tile))
     gray_norm = clahe.apply(gray)
     if blur_ksize > 0:
-        # ensure odd kernel
-        k = blur_ksize if blur_ksize % 2 == 1 else blur_ksize + 1
-        gray_norm = cv2.GaussianBlur(gray_norm, (k, k), 0)
+        gray_norm = cv2.GaussianBlur(gray_norm, (blur_ksize, blur_ksize), 0)
     return gray_norm
 
 def auto_deskew(img_bgr: np.ndarray, gray: np.ndarray, hough_thresh: int = 120) -> np.ndarray:
@@ -69,11 +68,9 @@ def auto_deskew(img_bgr: np.ndarray, gray: np.ndarray, hough_thresh: int = 120) 
         angles.append(deg)
     if len(angles) == 0:
         return img_bgr
-    # Use median to be robust to outliers
-    mean_angle = float(np.median(angles))
+    # Find mean angle near 0 or 90 multiples
+    mean_angle = float(np.mean(angles))
     # Rotate by -mean_angle
-    if abs(mean_angle) < 0.25:
-        return img_bgr
     h, w = img_bgr.shape[:2]
     M = cv2.getRotationMatrix2D((w/2, h/2), -mean_angle, 1.0)
     rotated = cv2.warpAffine(img_bgr, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
@@ -82,7 +79,6 @@ def auto_deskew(img_bgr: np.ndarray, gray: np.ndarray, hough_thresh: int = 120) 
 def perspective_warp(img_bgr: np.ndarray) -> np.ndarray:
     """
     Try to find module contour (largest quadrilateral) and warp to a rectangle.
-    If unsuccessful, returns the original image.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -97,7 +93,8 @@ def perspective_warp(img_bgr: np.ndarray) -> np.ndarray:
         return img_bgr
     # Order points
     pts = approx.reshape(4, 2).astype(np.float32)
-    # Order in top-left, top-right, bottom-right, bottom-left via sum and diff
+    # Order in top-left, top-right, bottom-right, bottom-left
+    # via sum and diff
     s = pts.sum(axis=1)
     diff = np.diff(pts, axis=1).flatten()
     tl = pts[np.argmin(s)]
@@ -148,12 +145,12 @@ def detect_grid_lines(gray: np.ndarray,
         use = bw
 
     # Vertical lines
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(1, ksize_v)))
+    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, ksize_v))
     vert = cv2.erode(use, kernel_v, iterations=1)
     vert = cv2.dilate(vert, kernel_v, iterations=1)
 
     # Horizontal lines
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (max(1, ksize_h), 1))
+    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (ksize_h, 1))
     horiz = cv2.erode(use, kernel_h, iterations=1)
     horiz = cv2.dilate(horiz, kernel_h, iterations=1)
 
